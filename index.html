@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>De la imprenta al algoritmo</title>
+<meta name="description" content="Visualización 3D interactiva: la evolución de los medios de comunicación desde la imprenta de Gutenberg hasta la IA generativa.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Archivo+Narrow:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --papel:#F3EEE4; --tinta:#171512; --tinta-2:#4F4A42; --filete:#B5AC9C; --alarma:#F26D6D;
+  --serif:"Playfair Display",Georgia,serif; --texto:"Newsreader",Georgia,serif;
+  --narrow:"Archivo Narrow","Arial Narrow",Arial,sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{background:var(--tinta);color:var(--papel);font-family:var(--texto);overflow:hidden;-webkit-font-smoothing:antialiased;}
+#lienzo{position:fixed;inset:0;display:block;cursor:grab;touch-action:none;}
+#lienzo:active{cursor:grabbing;}
+
+/* velos para que el texto se lea sobre la escena */
+body::before,body::after{content:"";position:fixed;left:0;right:0;pointer-events:none;z-index:1;}
+#lienzo{z-index:0;} header,#ficha,#eras,footer,.ayuda{z-index:2;} #lista{z-index:3;}
+body::before{top:0;height:210px;background:linear-gradient(#171512 35%,rgba(23,21,18,0));}
+body::after{bottom:0;height:150px;background:linear-gradient(rgba(23,21,18,0),#171512 70%);}
+/* cabecera */
+header{position:fixed;left:32px;top:24px;right:32px;pointer-events:none;display:flex;justify-content:space-between;align-items:flex-start;gap:24px;}
+.marca{font-family:var(--narrow);font-weight:600;font-size:13px;letter-spacing:.16em;text-transform:uppercase;opacity:.75;margin:0 0 6px;}
+h1{font-family:var(--serif);font-weight:900;font-size:clamp(28px,4.2vw,56px);line-height:1;margin:0;letter-spacing:-.01em;}
+h1 i{color:var(--alarma);font-weight:700;}
+.sub{font-size:clamp(15px,1.4vw,19px);margin:8px 0 0;opacity:.85;max-width:560px;}
+.botonera{pointer-events:auto;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+button{font-family:var(--narrow);font-weight:600;font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+  background:transparent;color:var(--papel);border:1.5px solid rgba(243,238,228,.55);padding:9px 14px;cursor:pointer;border-radius:0;}
+button:hover,button:focus-visible{border-color:var(--papel);outline:none;background:rgba(243,238,228,.08);}
+button[aria-pressed="true"]{background:var(--papel);color:var(--tinta);border-color:var(--papel);}
+
+/* ficha del hito */
+#ficha{position:fixed;right:32px;top:50%;transform:translateY(-50%);width:min(400px,calc(100vw - 64px));
+  background:var(--papel);color:var(--tinta);padding:26px 28px 22px;box-shadow:0 18px 60px rgba(0,0,0,.45);}
+#ficha .era{font-family:var(--narrow);font-weight:700;font-size:13px;letter-spacing:.16em;text-transform:uppercase;display:flex;align-items:center;gap:10px;margin:0;}
+#ficha .era i{width:12px;height:12px;border-radius:50%;display:inline-block;}
+#ficha .anio{font-family:var(--serif);font-weight:900;font-size:64px;line-height:1;margin:12px 0 4px;font-variant-numeric:lining-nums;}
+#ficha h2{font-family:var(--serif);font-weight:700;font-size:26px;line-height:1.15;margin:0 0 12px;}
+#ficha p.texto{font-size:18px;line-height:1.45;margin:0;}
+#ficha .fuente{font-family:var(--narrow);font-size:13px;letter-spacing:.06em;color:var(--tinta-2);border-top:1px solid var(--filete);margin:16px 0 0;padding-top:10px;}
+#ficha .nav{display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:10px;}
+#ficha .nav button{color:var(--tinta);border-color:var(--tinta);}
+#ficha .nav button:hover{background:rgba(23,21,18,.07);}
+#ficha .contador{font-family:var(--narrow);font-weight:600;font-size:13px;letter-spacing:.12em;color:var(--tinta-2);}
+
+/* línea de eras (abajo) */
+#eras{position:fixed;left:32px;bottom:58px;display:flex;gap:18px;flex-wrap:wrap;font-family:var(--narrow);font-weight:600;font-size:12px;letter-spacing:.14em;text-transform:uppercase;}
+#eras span{display:inline-flex;align-items:center;gap:8px;opacity:.85;}
+#eras i{width:10px;height:10px;border-radius:50%;display:inline-block;}
+footer{position:fixed;left:32px;right:32px;bottom:18px;font-family:var(--narrow);font-size:12px;letter-spacing:.06em;opacity:.7;line-height:1.4;}
+.ayuda{position:fixed;left:32px;bottom:88px;font-family:var(--narrow);font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.55;}
+
+/* vista de lista (accesible y sin WebGL) */
+#lista{position:fixed;inset:0;background:var(--papel);color:var(--tinta);overflow:auto;padding:40px 32px 60px;display:none;}
+#lista.abierta{display:block;}
+#lista .dentro{max-width:820px;margin:0 auto;}
+#lista h2{font-family:var(--serif);font-weight:900;font-size:40px;margin:0 0 6px;}
+#lista ol{list-style:none;padding:0;margin:24px 0 0;}
+#lista li{display:grid;grid-template-columns:90px 1fr;gap:16px;padding:14px 0;border-top:1px solid var(--filete);}
+#lista .a{font-family:var(--serif);font-weight:700;font-size:26px;}
+#lista h3{margin:0 0 4px;font-family:var(--serif);font-size:20px;}
+#lista p{margin:0;font-size:17px;line-height:1.4;}
+#lista small{font-family:var(--narrow);color:var(--tinta-2);letter-spacing:.04em;}
+#lista .cerrar{position:sticky;top:0;float:right;color:var(--tinta);border-color:var(--tinta);background:var(--papel);}
+
+@media (max-width:760px){
+  header{left:16px;right:16px;top:14px;flex-direction:column;}
+  .botonera{justify-content:flex-start;}
+  #ficha{left:16px;right:16px;top:auto;bottom:16px;transform:none;width:auto;padding:16px 18px 14px;}
+  #ficha .anio{font-size:40px;margin:6px 0 2px;}
+  #ficha h2{font-size:20px;margin-bottom:6px;}
+  #ficha p.texto{font-size:15px;}
+  #eras,.ayuda,footer{display:none;}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+</style>
+</head>
+<body>
+<canvas id="lienzo" aria-label="Espiral 3D de hitos de la historia de los medios. Usa los botones Anterior y Siguiente o la vista de lista." role="img"></canvas>
+
+<header>
+  <div>
+    <p class="marca">Historia de los medios · visualización interactiva</p>
+    <h1>De la imprenta <i>al algoritmo</i></h1>
+    <p class="sub">575 años de medios de comunicación en una espiral: de abajo (1450) arriba (hoy). Pulsa un hito o recórrelos en orden.</p>
+  </div>
+  <div class="botonera">
+    <button id="b-escala" aria-pressed="false" title="Cambia la altura de cada hito a su fecha real">Tiempo real</button>
+    <button id="b-giro" aria-pressed="true">Giro automático</button>
+    <button id="b-lista">Ver como lista</button>
+  </div>
+</header>
+
+<aside id="ficha" aria-live="polite">
+  <p class="era"><i id="f-color"></i><span id="f-era"></span></p>
+  <p class="anio" id="f-anio"></p>
+  <h2 id="f-titulo"></h2>
+  <p class="texto" id="f-texto"></p>
+  <p class="fuente" id="f-fuente"></p>
+  <div class="nav">
+    <button id="b-ant" aria-label="Hito anterior">← Anterior</button>
+    <span class="contador" id="f-cont"></span>
+    <button id="b-sig" aria-label="Hito siguiente">Siguiente →</button>
+  </div>
+</aside>
+
+<div class="ayuda">Arrastra para girar · rueda o pellizco para acercar · flechas ← → para recorrer</div>
+<div id="eras"></div>
+<footer>Código generado con IA (vibe coding) · Selección de hitos, fechas y textos revisados por Pablo Berdón Prieto · Pieza de demostración del taller de vibe coding · Máster en Periodismo Digital (UVa), 2026 · No recoge datos.</footer>
+
+<section id="lista" aria-label="Hitos en forma de lista">
+  <div class="dentro">
+    <button class="cerrar" id="b-cerrar">Cerrar lista</button>
+    <p class="marca" style="opacity:1;color:var(--tinta-2)">Vista accesible</p>
+    <h2>De la imprenta al algoritmo</h2>
+    <p>Los mismos hitos de la espiral, en orden cronológico.</p>
+    <ol id="lista-ol"></ol>
+  </div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ---------------------------------------------------------------
+// DATOS · cada hito con su fuente. La IA no inventa datos: se los damos.
+// ---------------------------------------------------------------
+const ERAS = {
+  papel:     { nombre: "Papel",            color: "#E9DCC0" },
+  cable:     { nombre: "Cable y ondas",    color: "#7FB3D5" },
+  pantalla:  { nombre: "Pantallas",        color: "#E8A33D" },
+  red:       { nombre: "La red",           color: "#F26D6D" },
+  ia:        { nombre: "Algoritmos e IA",  color: "#B79CF2" }
+};
+const HITOS = [
+  { a: 1450, et: "c. 1450", era: "papel", t: "La imprenta de tipos móviles",
+    x: "Johannes Gutenberg combina en Maguncia tipos metálicos móviles, tinta de aceite y prensa. El texto se copia a escala: nace la cultura impresa.",
+    f: "British Library (Biblia de Gutenberg, c. 1455)" },
+  { a: 1605, et: "1605", era: "papel", t: "El primer periódico",
+    x: "Johann Carolus publica en Estrasburgo «Relation», una hoja semanal de noticias que la asociación mundial de editores reconoce como el primer periódico.",
+    f: "WAN-IFRA (Asociación Mundial de Periódicos)" },
+  { a: 1661, et: "1661", era: "papel", t: "La Gaceta de Madrid",
+    x: "Aparece la «Relación o Gazeta», origen de la Gaceta de Madrid: la publicación oficial de la que desciende el actual BOE.",
+    f: "Agencia Estatal BOE (Gazeta: colección histórica)" },
+  { a: 1702, et: "1702", era: "papel", t: "El primer diario",
+    x: "The Daily Courant sale en Londres: es el primer diario en lengua inglesa. Las noticias pasan a tener una cita cada día.",
+    f: "British Library" },
+  { a: 1758, et: "1758", era: "papel", t: "El primer diario español",
+    x: "Francisco Mariano Nipho funda en Madrid el «Diario noticioso, curioso-erudito y comercial, público y económico», el primer diario de España.",
+    f: "Biblioteca Nacional de España (Hemeroteca Digital)" },
+  { a: 1814, et: "1814", era: "papel", t: "La prensa de vapor",
+    x: "The Times se imprime con la prensa mecánica de vapor de Friedrich Koenig: más de mil pliegos por hora. El periódico se abarata y se masifica.",
+    f: "Science Museum Group (Londres)" },
+  { a: 1835, et: "1835", era: "cable", t: "La primera agencia de noticias",
+    x: "Charles-Louis Havas funda en París la agencia que lleva su nombre, antecedente de la AFP. La noticia se convierte en un servicio que se distribuye.",
+    f: "Agence France-Presse (historia de la agencia)" },
+  { a: 1844, et: "1844", era: "cable", t: "El telégrafo",
+    x: "Samuel Morse transmite entre Washington y Baltimore el mensaje «What hath God wrought». Por primera vez, la noticia viaja más rápido que el mensajero.",
+    f: "Library of Congress (EE. UU.)" },
+  { a: 1895, et: "1895", era: "cable", t: "El cinematógrafo",
+    x: "Los hermanos Lumière proyectan en París sus primeras películas ante público de pago. La imagen en movimiento llegará a los noticiarios.",
+    f: "Institut Lumière (Lyon)" },
+  { a: 1920, et: "1920", era: "cable", t: "La radio comercial",
+    x: "La emisora KDKA de Pittsburgh emite en directo los resultados de las elecciones presidenciales: arranca la radiodifusión comercial regular.",
+    f: "IEEE (Milestones: KDKA, 1920)" },
+  { a: 1924, et: "1924", era: "cable", t: "La radio llega a España",
+    x: "Radio Barcelona (EAJ-1) inaugura sus emisiones: es la primera emisora de radio española.",
+    f: "Cadena SER (historia de Radio Barcelona)" },
+  { a: 1936, et: "1936", era: "pantalla", t: "La televisión regular",
+    x: "La BBC inicia desde Alexandra Palace, en Londres, el primer servicio regular de televisión de alta definición del mundo.",
+    f: "BBC (History of the BBC)" },
+  { a: 1956, et: "1956", era: "pantalla", t: "Nace TVE",
+    x: "Televisión Española comienza sus emisiones regulares el 28 de octubre desde Madrid. La televisión entra en los hogares españoles.",
+    f: "RTVE (archivo e historia)" },
+  { a: 1969, et: "1969", era: "pantalla", t: "ARPANET",
+    x: "Dos ordenadores de UCLA y Stanford intercambian el primer mensaje de ARPANET, la red que dará origen a internet.",
+    f: "Internet Society (Brief History of the Internet)" },
+  { a: 1980, et: "1980", era: "pantalla", t: "Noticias 24 horas",
+    x: "Ted Turner lanza CNN, el primer canal de televisión dedicado solo a noticias. La actualidad ya no se apaga nunca.",
+    f: "CNN (historia de la cadena)" },
+  { a: 1991, et: "1991", era: "red", t: "La World Wide Web",
+    x: "Tim Berners-Lee, en el CERN, abre la web al público: páginas enlazadas que cualquiera puede leer… y publicar.",
+    f: "CERN (The birth of the Web)" },
+  { a: 1996, et: "1996", era: "red", t: "Los diarios saltan a la red",
+    x: "Tras los pioneros de 1994 y 1995, El País estrena su edición digital. La prensa española se instala en internet.",
+    f: "Hemeroteca de El País" },
+  { a: 2004, et: "2004", era: "red", t: "Las redes sociales",
+    x: "Nace Facebook (2004); le siguen YouTube (2005) y Twitter (2006). Cualquiera difunde, pero el algoritmo decide qué se ve.",
+    f: "Comunicados y hemeroteca de las propias empresas" },
+  { a: 2007, et: "2007", era: "red", t: "El móvil, el nuevo quiosco",
+    x: "Apple presenta el iPhone. La pantalla táctil conectada se convierte en la principal puerta de entrada a las noticias.",
+    f: "Apple (nota de prensa, 9-1-2007)" },
+  { a: 2016, et: "2016", era: "ia", t: "La posverdad",
+    x: "Oxford Dictionaries elige «post-truth» palabra del año: los hechos objetivos pesan menos que las emociones. La desinformación se hace industrial.",
+    f: "Oxford Languages (Word of the Year 2016)" },
+  { a: 2022, et: "2022", era: "ia", t: "La IA generativa, para todos",
+    x: "OpenAI abre ChatGPT al público. Una IA que escribe, resume… y también inventa llega a cualquiera con un navegador.",
+    f: "OpenAI (30-11-2022)" },
+  { a: 2025, et: "2025", era: "ia", t: "El vibe coding",
+    x: "Andrej Karpathy bautiza el «vibe coding»: construir programas conversando con una IA. Por primera vez, los periodistas pueden hacer sus propias herramientas.",
+    f: "A. Karpathy (publicación en X, 2-2-2025)" },
+  { a: 2026, et: "¿Y ahora?", era: "ia", t: "El siguiente hito lo construyes tú",
+    x: "Con criterio periodístico y las gafas de la ética: datos reales, fuentes visibles, uso de IA declarado. Esta misma pieza está hecha así.",
+    f: "Taller de vibe coding · 19-10-2026" }
+];
+
+// ---------------------------------------------------------------
+// vista de lista y leyenda de eras (funcionan aunque falle el 3D)
+// ---------------------------------------------------------------
+document.getElementById('eras').innerHTML = Object.values(ERAS)
+  .map(e => `<span><i style="background:${e.color}"></i>${e.nombre}</span>`).join('');
+document.getElementById('lista-ol').innerHTML = HITOS.map(h =>
+  `<li><span class="a">${h.et}</span><div><h3>${h.t}</h3><p>${h.x}</p><small>Fuente: ${h.f} · Era: ${ERAS[h.era].nombre}</small></div></li>`).join('');
+const lista = document.getElementById('lista');
+document.getElementById('b-lista').onclick = () => { lista.classList.add('abierta'); document.getElementById('b-cerrar').focus(); };
+document.getElementById('b-cerrar').onclick = () => lista.classList.remove('abierta');
+
+let sel = 0;
+function pintarFicha() {
+  const h = HITOS[sel], e = ERAS[h.era];
+  document.getElementById('f-color').style.background = e.color;
+  document.getElementById('f-era').textContent = e.nombre;
+  document.getElementById('f-anio').textContent = h.et;
+  document.getElementById('f-titulo').textContent = h.t;
+  document.getElementById('f-texto').textContent = h.x;
+  document.getElementById('f-fuente').textContent = 'Fuente: ' + h.f;
+  document.getElementById('f-cont').textContent = `${sel + 1} / ${HITOS.length}`;
+}
+function ir(i) { sel = (i + HITOS.length) % HITOS.length; pintarFicha(); if (window.alSeleccionar) alSeleccionar(); }
+document.getElementById('b-ant').onclick = () => ir(sel - 1);
+document.getElementById('b-sig').onclick = () => ir(sel + 1);
+addEventListener('keydown', e => {
+  if (lista.classList.contains('abierta')) { if (e.key === 'Escape') lista.classList.remove('abierta'); return; }
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { ir(sel + 1); e.preventDefault(); }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { ir(sel - 1); e.preventDefault(); }
+});
+pintarFicha();
+
+// ---------------------------------------------------------------
+// ESCENA 3D (Three.js r128)
+// ---------------------------------------------------------------
+(function () {
+  const canvas = document.getElementById('lienzo');
+  if (!window.THREE) { lista.classList.add('abierta'); return; }
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true }); }
+  catch (err) { lista.classList.add('abierta'); return; }
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#171512');
+  scene.fog = new THREE.Fog('#171512', 26, 70);
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const luz = new THREE.DirectionalLight(0xffffff, 0.8); luz.position.set(8, 20, 12); scene.add(luz);
+
+  const R = 7, VUELTAS = 2.6, ALTO = 34, N = HITOS.length;
+  const angulo = i => (i / (N - 1)) * VUELTAS * Math.PI * 2;
+  const yHito = i => (i / (N - 1)) * ALTO;
+  const yReal = i => ((HITOS[i].a - 1450) / (2026 - 1450)) * ALTO;
+  let mezcla = 0, mezclaObj = 0; // 0 = por hitos, 1 = tiempo real
+
+  // espiral guía
+  const PUNTOS = 400;
+  const geoEsp = new THREE.BufferGeometry();
+  const posEsp = new Float32Array(PUNTOS * 3);
+  geoEsp.setAttribute('position', new THREE.BufferAttribute(posEsp, 3));
+  const espiral = new THREE.Line(geoEsp, new THREE.LineBasicMaterial({ color: 0xB5AC9C, transparent: true, opacity: 0.45 }));
+  scene.add(espiral);
+
+  // eje central con marcas de siglo
+  const eje = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, ALTO + 2, 0)]),
+    new THREE.LineBasicMaterial({ color: 0x4F4A42 }));
+  scene.add(eje);
+
+  function etiqueta(texto, opciones) {
+    const o = Object.assign({ tam: 64, color: '#F3EEE4', fuente: '700 64px "Playfair Display", Georgia, serif', ancho: 512, alto: 128, escala: 2.6, centro: [0, 0.5] }, opciones);
+    const c = document.createElement('canvas'); c.width = o.ancho; c.height = o.alto;
+    const g = c.getContext('2d');
+    g.font = o.fuente; g.fillStyle = o.color; g.textBaseline = 'middle'; g.fillText(texto, 8, o.alto / 2);
+    const tex = new THREE.CanvasTexture(c); tex.minFilter = THREE.LinearFilter;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sp.scale.set(o.escala * (o.ancho / o.alto), o.escala, 1);
+    sp.center.set(o.centro[0], o.centro[1]);
+    return sp;
+  }
+
+  // siglos en el eje (solo visibles en tiempo real)
+  const siglos = [];
+  [1500, 1600, 1700, 1800, 1900, 2000].forEach(s => {
+    const sp = etiqueta(String(s), { fuente: '600 54px "Archivo Narrow", Arial, sans-serif', color: '#8C8476', escala: 1.4 });
+    sp.position.set(0.4, ((s - 1450) / (2026 - 1450)) * ALTO, 0);
+    sp.material.opacity = 0; scene.add(sp); siglos.push(sp);
+  });
+
+  // hitos
+  const nodos = [], etiquetas = [];
+  const geoBola = new THREE.SphereGeometry(0.55, 32, 16);
+  HITOS.forEach((h, i) => {
+    const col = new THREE.Color(ERAS[h.era].color);
+    const m = new THREE.Mesh(geoBola, new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.25, roughness: 0.5 }));
+    m.userData.i = i; scene.add(m); nodos.push(m);
+    const sp = etiqueta(h.et, { fuente: '700 60px "Playfair Display", Georgia, serif', escala: 1.5, centro: [0.08, 0] });
+    scene.add(sp); etiquetas.push(sp);
+  });
+  // anillo de selección
+  const anillo = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.06, 12, 64), new THREE.MeshBasicMaterial({ color: 0xF3EEE4 }));
+  scene.add(anillo);
+
+  // polvo de tipos (ambiente)
+  const nPolvo = 600, posPolvo = new Float32Array(nPolvo * 3);
+  for (let k = 0; k < nPolvo; k++) {
+    const r = 10 + Math.random() * 22, t = Math.random() * Math.PI * 2;
+    posPolvo[k * 3] = Math.cos(t) * r; posPolvo[k * 3 + 1] = -4 + Math.random() * (ALTO + 10); posPolvo[k * 3 + 2] = Math.sin(t) * r;
+  }
+  const geoPolvo = new THREE.BufferGeometry(); geoPolvo.setAttribute('position', new THREE.BufferAttribute(posPolvo, 3));
+  scene.add(new THREE.Points(geoPolvo, new THREE.PointsMaterial({ color: 0xB5AC9C, size: 0.07, transparent: true, opacity: 0.6 })));
+
+  function posicionar() {
+    for (let k = 0; k < PUNTOS; k++) {
+      const u = k / (PUNTOS - 1), i = u * (N - 1), t = u * VUELTAS * Math.PI * 2;
+      const i0 = Math.floor(i), i1 = Math.min(N - 1, i0 + 1), fr = i - i0;
+      const yh = u * ALTO;
+      const yr = yReal(i0) + (yReal(i1) - yReal(i0)) * fr;
+      posEsp[k * 3] = Math.cos(t) * R; posEsp[k * 3 + 1] = yh + (yr - yh) * mezcla; posEsp[k * 3 + 2] = Math.sin(t) * R;
+    }
+    geoEsp.attributes.position.needsUpdate = true;
+    nodos.forEach((m, i) => {
+      const t = angulo(i), y = yHito(i) + (yReal(i) - yHito(i)) * mezcla;
+      m.position.set(Math.cos(t) * R, y, Math.sin(t) * R);
+      etiquetas[i].position.set(Math.cos(t) * R, y + 0.85, Math.sin(t) * R);
+    });
+    siglos.forEach(s => s.material.opacity = mezcla * 0.9);
+  }
+
+  // cámara orbital alrededor del eje
+  const cam = { theta: angulo(0) + 0.18, dist: 24, y: yHito(0) + 3, thetaObj: angulo(0) + 0.18, yObj: yHito(0) + 3, distObj: 24 };
+  let giro = true, arrastrando = false, ultimoX = 0, ultimoY = 0, movido = 0, ultimoGesto = 0;
+  function alSeleccionarInterno() {
+    const m = nodos[sel];
+    cam.yObj = m.position.y + 1.2;
+    // el hito queda delante de la cámara (por el lado corto)
+    let objetivo = angulo(sel) + 0.18;
+    const dos = Math.PI * 2;
+    while (objetivo - cam.thetaObj > Math.PI) objetivo -= dos;
+    while (objetivo - cam.thetaObj < -Math.PI) objetivo += dos;
+    cam.thetaObj = objetivo;
+    giro = false; document.getElementById('b-giro').setAttribute('aria-pressed', 'false');
+  }
+  window.alSeleccionar = alSeleccionarInterno;
+
+  document.getElementById('b-giro').onclick = e => { giro = !giro; e.currentTarget.setAttribute('aria-pressed', String(giro)); };
+  document.getElementById('b-escala').onclick = e => {
+    mezclaObj = mezclaObj ? 0 : 1; e.currentTarget.setAttribute('aria-pressed', String(!!mezclaObj));
+    setTimeout(alSeleccionarInterno, 600);
+  };
+
+  canvas.addEventListener('pointerdown', e => { arrastrando = true; ultimoX = e.clientX; ultimoY = e.clientY; movido = 0; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', e => {
+    if (!arrastrando) return;
+    const dx = e.clientX - ultimoX, dy = e.clientY - ultimoY; ultimoX = e.clientX; ultimoY = e.clientY; movido += Math.abs(dx) + Math.abs(dy);
+    cam.thetaObj -= dx * 0.006; cam.yObj = Math.max(-2, Math.min(ALTO + 4, cam.yObj + dy * 0.05)); ultimoGesto = Date.now();
+  });
+  canvas.addEventListener('pointerup', e => {
+    arrastrando = false;
+    if (movido < 6) { // clic: seleccionar el hito más cercano al puntero
+      const r = canvas.getBoundingClientRect();
+      const v = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      const ray = new THREE.Raycaster(); ray.setFromCamera(v, camera);
+      const hit = ray.intersectObjects(nodos)[0];
+      if (hit) ir(hit.object.userData.i);
+    }
+  });
+  canvas.addEventListener('wheel', e => { cam.distObj = Math.max(10, Math.min(46, cam.distObj + e.deltaY * 0.02)); e.preventDefault(); }, { passive: false });
+  let pinch = 0;
+  canvas.addEventListener('touchmove', e => {
+    if (e.touches.length === 2) {
+      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      if (pinch) cam.distObj = Math.max(10, Math.min(46, cam.distObj - (d - pinch) * 0.05));
+      pinch = d;
+    }
+  }, { passive: true });
+  canvas.addEventListener('touchend', () => { pinch = 0; });
+
+  function tam() {
+    const w = innerWidth, h = innerHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h;
+    // desplaza el centro de la escena para que la ficha no tape el hito
+    if (w > 760) camera.setViewOffset(w, h, Math.min(260, w * 0.16), 0, w, h);
+    else camera.setViewOffset(w, h, 0, h * 0.2, w, h);
+    camera.updateProjectionMatrix();
+    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  }
+  addEventListener('resize', tam); tam();
+
+  const reloj = new THREE.Clock();
+  const QUIETO = new URLSearchParams(location.search).get('quieto') === '1';
+  if (QUIETO) giro = false;
+  function animar() {
+    const dt = Math.min(0.05, reloj.getDelta());
+    mezcla += (mezclaObj - mezcla) * Math.min(1, dt * 3.5);
+    posicionar();
+    if (giro && !arrastrando && Date.now() - ultimoGesto > 2500) cam.thetaObj += dt * 0.12;
+    const k = QUIETO ? 1 : Math.min(1, dt * 3);
+    cam.theta += (cam.thetaObj - cam.theta) * k; cam.y += (cam.yObj - cam.y) * k; cam.dist += (cam.distObj - cam.dist) * k;
+    camera.position.set(Math.cos(cam.theta) * cam.dist, cam.y + 3, Math.sin(cam.theta) * cam.dist);
+    camera.lookAt(0, cam.y - 1.2, 0);
+    // anillo sobre el hito seleccionado, mirando a la cámara
+    const m = nodos[sel]; anillo.position.copy(m.position); anillo.lookAt(camera.position);
+    const pulso = 1 + Math.sin(reloj.elapsedTime * 3) * 0.06; anillo.scale.setScalar(pulso);
+    nodos.forEach((n, i) => { const s = i === sel ? 1.35 : 1; n.scale.setScalar(n.scale.x + (s - n.scale.x) * 0.15); });
+    renderer.render(scene, camera);
+    requestAnimationFrame(animar);
+  }
+  posicionar(); alSeleccionarInterno(); giro = !QUIETO; document.getElementById('b-giro').setAttribute('aria-pressed', String(giro));
+  const ini = parseInt(new URLSearchParams(location.search).get('hito'), 10);
+  if (ini > 0) ir(ini - 1);
+  if (new URLSearchParams(location.search).get('real') === '1') document.getElementById('b-escala').click();
+  animar();
+})();
+</script>
+</body>
+</html>
